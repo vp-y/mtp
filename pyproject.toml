@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bus"
+version = "0.1.0"
+description = "Dual-stage deep learning for breast ultrasound lesion segmentation and classification"
+readme = "README.md"
+requires-python = ">=3.9"
+# Dependencies are listed in requirements*.txt on purpose: on Kaggle we install
+# this package with --no-deps so pip never replaces the preinstalled CUDA torch.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

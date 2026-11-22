@@ -1,0 +1,45 @@
+# Stage 2 - classification of the lesion crop. Defaults = the paper's best model
+# (MobileNetV3-Small, MLP head (128, 64), last 10 parameter groups unfrozen, dropout 0.5).
+name: mobilenetv3_small_mlp_k10_d0.5
+
+data:
+  scenario: A
+  image_size: 224           # crop is resized to this size
+  resize_mode: pad          # pad | stretch
+  mask_dir: null            # null = crop with ground-truth masks; or a folder written by bus.predict_masks
+
+crop:                       # how the region of interest is cut from the mask (not specified in the paper)
+  margin: 0.1               # extra context on each side, as a fraction of the lesion box size
+  min_size: 16              # minimum crop side in pixels
+  square: false
+  component: largest        # largest | all (which mask blobs define the box)
+
+model:
+  backbone: mobilenetv3_small   # resnet18 | resnet50 | densenet121 | efficientnet_b0 | convnext_tiny | mobilenetv3_small | vit_b16
+  head: mlp                     # linear | mlp (128, 64)
+  dropout: 0.5
+  unfreeze_k: 10                # 0 = frozen backbone; K = last K parameter tensors trainable; all = full fine-tuning
+  pretrained: true
+
+train:
+  epochs: 100
+  batch_size: 32
+  lr: 1.0e-3                # Adam, paper value
+  weight_decay: 0.0
+  scheduler: {factor: 0.1, patience: 3}
+  early_stopping: 10
+  oversample: true
+  amp: true
+  num_workers: 2
+  seed: 42
+
+augment:
+  hflip: 0.5
+  rotate: 20
+  translate: 0.2
+  scale: [0.9, 1.1]
+  p_affine: 0.8
+
+eval:
+  threshold: 0.5            # P(malignant) >= threshold -> malignant
+  roles: [val, test]

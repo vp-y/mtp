@@ -1,0 +1,39 @@
+# Multi-task baseline (paper section "Multi-task Swin Transformer Baseline").
+name: mtswin_tiny
+
+data:
+  scenario: A
+  image_size: 224           # paper says 256; window-7 Swin needs 224 (see docs/IMPLEMENTATION_NOTES.md)
+  resize_mode: pad
+
+model:
+  name: swin_tiny_patch4_window7_224
+  pretrained: true
+  dropout: 0.3              # paper value
+
+loss:
+  seg: 1.0                  # BCEWithLogits on the mask
+  cls: 1.0                  # cross-entropy on benign/malignant
+
+train:
+  epochs: 50
+  batch_size: 16
+  lr: 1.0e-4                # AdamW, paper values
+  weight_decay: 1.0e-4
+  scheduler: {factor: 0.1, patience: 3}
+  early_stopping: 10
+  oversample: true
+  amp: true
+  num_workers: 2
+  seed: 42
+
+augment:
+  hflip: 0.5
+  rotate: 20
+  translate: 0.2
+  scale: [0.9, 1.1]
+  p_affine: 0.8
+
+eval:
+  threshold: 0.5
+  roles: [val, test, external]

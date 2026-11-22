@@ -1,0 +1,32 @@
+# Single-step baseline (paper section "Comparison to Single-step Model").
+name: maskrcnn_r50_fpn
+
+data:
+  scenario: A
+  image_size: 256
+  resize_mode: pad
+
+model:
+  min_size: 512             # torchvision rescales the 256 input internally (helps small lesions)
+  max_size: 512
+  pretrained: true          # COCO weights
+  score_threshold: 0.5      # detections kept for the segmentation mask
+
+train:
+  epochs: 30                # paper: 30 epochs, SGD lr 0.001, momentum 0.9, weight decay 0.0005
+  batch_size: 4
+  lr: 1.0e-3
+  momentum: 0.9
+  weight_decay: 5.0e-4
+  num_workers: 2
+  seed: 42
+
+augment:
+  hflip: 0.5
+  rotate: 20
+  translate: 0.2
+  scale: [0.9, 1.1]
+  p_affine: 0.8
+
+eval:
+  roles: [val, test, external]

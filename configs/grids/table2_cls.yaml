@@ -1,0 +1,13 @@
+# Paper Table 2: classifier backbones x heads x unfreeze K x dropout on Scenario A (56 runs).
+# python -m bus.grid configs/grids/table2_cls.yaml --out runs
+task: cls
+base: configs/cls/base.yaml
+set:
+  data.scenario: A
+
+product:
+  model.backbone: [mobilenetv3_small, efficientnet_b0, resnet18, resnet50, densenet121, convnext_tiny, vit_b16]
+  model.head: [linear, mlp]
+  model.unfreeze_k: [0, 10]
+  model.dropout: [0.0, 0.5]
+name_template: "{model_backbone}_{model_head}_k{model_unfreeze_k}_d{model_dropout}"

@@ -1,0 +1,26 @@
+# data and experiment outputs never go to GitHub
+dataset/
+runs/
+reports/
+smoke/
+*.pt
+*.pth
+*.zip
+
+# the paper PDF (reference only)
+*.pdf
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

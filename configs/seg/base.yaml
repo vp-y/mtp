@@ -1,0 +1,46 @@
+# Stage 1 - segmentation. Defaults = the paper's best model (DeepLabV3+ / ResNet34 / 64 channels).
+name: deeplabv3plus_resnet34_c64
+
+data:
+  scenario: A               # A | B | C | deploy  (see src/bus/data/manifest.py)
+  include_normal: false     # the paper uses benign + malignant only
+  image_size: 256
+  resize_mode: pad          # pad = keep aspect ratio (default) | stretch = as in the paper
+  in_channels: 1            # grayscale input
+
+model:
+  arch: deeplabv3plus       # unet | fpn | deeplabv3plus | vanilla_unet
+  encoder: resnet34         # resnet34 | efficientnet-b0
+  encoder_weights: imagenet
+  base_channels: 64         # decoder width, see docs/IMPLEMENTATION_NOTES.md
+
+loss:                       # paper: 0.4*BCE + 0.5*(1-Dice) + 0.5*(1-IoU)
+  bce: 0.4
+  dice: 0.5
+  iou: 0.5
+
+train:
+  epochs: 100
+  batch_size: 16
+  lr: 1.0e-4                # Adam, paper value
+  weight_decay: 0.0
+  scheduler: {factor: 0.1, patience: 3}   # ReduceLROnPlateau, paper values
+  early_stopping: 10                      # paper value
+  monitor: dice             # dice | loss (validation metric used for LR schedule + early stopping)
+  oversample: true          # balance benign/malignant in each epoch (paper)
+  amp: true
+  num_workers: 2
+  seed: 42
+
+augment:                    # training split only (paper: 20 deg rotation, 20 % shift, zoom, h-flip)
+  hflip: 0.5
+  rotate: 20
+  translate: 0.2
+  scale: [0.9, 1.1]
+  p_affine: 0.8
+
+eval:
+  threshold: 0.5            # probability -> binary mask
+  post: none                # none | largest (keep only the largest connected component)
+  min_area: 0               # remove predicted blobs smaller than this many pixels
+  roles: [val, test]        # add "external" to also test on BUS-BRA

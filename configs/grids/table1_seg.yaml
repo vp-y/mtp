@@ -1,0 +1,18 @@
+# Paper Table 1: segmentation architectures x encoders x widths on Scenario A (13 runs).
+# python -m bus.grid configs/grids/table1_seg.yaml --out runs
+task: seg
+base: configs/seg/base.yaml
+set:
+  data.scenario: A
+
+product:
+  model.arch: [unet, fpn, deeplabv3plus]
+  model.encoder: [resnet34, efficientnet-b0]
+  model.base_channels: [32, 64]
+name_template: "{model_arch}_{model_encoder}_c{model_base_channels}"
+
+runs:
+  - name: vanilla_unet_c32      # the "traditional" U-Net described in the paper
+    set:
+      model.arch: vanilla_unet
+      model.base_channels: 32

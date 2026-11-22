@@ -1,0 +1,4 @@
+# Kaggle images already ship torch (CUDA), torchvision, timm, albumentations,
+# opencv, pandas, scikit-learn, scipy, matplotlib and pyyaml.
+# Only the segmentation library is missing.
+segmentation-models-pytorch>=0.3.3
