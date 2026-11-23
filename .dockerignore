@@ -1,0 +1,14 @@
+dataset
+runs
+reports
+smoke
+kaggle_outputs
+notebooks
+tests
+docs
+scripts
+*.ipynb
+*.pdf
+*.zip
+.git
+__pycache__

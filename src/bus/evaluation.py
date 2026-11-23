@@ -36,18 +36,35 @@ def finalize(records, out_dir, role, meta, cls_threshold=0.5):
     out_dir.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(records)
     res = {**meta, "role": role, "n": int(len(df))}
-    if len(df) and "dice" in df.columns:
-        res["segmentation"] = summarize_seg(df)
-    if len(df) and "prob" in df.columns:
-        lab = df[df["y"].isin([0, 1])]
-        if len(lab):
-            res["classification"] = cls_scores(lab["y"], lab["prob"], cls_threshold)
-    if "lesion_found" in df.columns:
-        res["n_lesion_not_found"] = int((~df["lesion_found"].astype(bool)).sum())
+    res.update(_summaries(df, cls_threshold))
+    normal = df[df["label"] == "normal"] if "label" in df.columns else df.iloc[0:0]
+    if len(normal):  # normal scans: the only question is whether a lesion is (wrongly) found
+        found = normal["lesion_found"].astype(bool) if "lesion_found" in normal.columns \
+            else normal["pred_px"] > 0
+        res["normal_scans"] = {"n": int(len(normal)), "lesion_wrongly_found": int(found.sum()),
+                               "correctly_clear_rate": float(1 - found.mean())}
+    if "dataset" in df.columns and df["dataset"].nunique() > 1:
+        res["by_dataset"] = {str(k): {"n": int(len(g)), **_summaries(g, cls_threshold)}
+                             for k, g in df.groupby("dataset")}
     df.to_csv(out_dir / f"per_image_{role}.csv", index=False)
     save_json(res, out_dir / f"metrics_{role}.json")
     _print_summary(res)
     return res, df
+
+
+def _summaries(df: pd.DataFrame, cls_threshold: float) -> dict:
+    """Segmentation scores on lesion images, classification scores on benign/malignant images."""
+    out = {}
+    lesion = df[df["label"] != "normal"] if "label" in df.columns else df
+    if len(lesion) and "dice" in lesion.columns:
+        out["segmentation"] = summarize_seg(lesion)
+    if len(df) and "prob" in df.columns:
+        lab = df[df["y"].isin([0, 1])]
+        if len(lab):
+            out["classification"] = cls_scores(lab["y"], lab["prob"], cls_threshold)
+    if "lesion_found" in lesion.columns:
+        out["n_lesion_not_found"] = int((~lesion["lesion_found"].astype(bool)).sum())
+    return out
 
 
 def _print_summary(res: dict) -> None:
@@ -59,6 +76,9 @@ def _print_summary(res: dict) -> None:
     if c:
         parts.append(f"AUC={c['auc']:.3f} F1={c['f1']:.3f} P={c['precision']:.3f} "
                      f"R={c['recall']:.3f} Acc={c['accuracy']:.3f}")
+    ns = res.get("normal_scans")
+    if ns:
+        parts.append(f"normal scans clear={ns['correctly_clear_rate']:.3f} (n={ns['n']})")
     print(" | ".join(parts), flush=True)
 
 
@@ -67,6 +87,10 @@ def cases_figure(df: pd.DataFrame, data_root, pred_dir, out_path, k: int = 2, ti
     if df is None or len(df) == 0 or "iou" not in df.columns:
         return
     data_root, pred_dir = Path(data_root), Path(pred_dir)
+    if "gt_px" in df.columns:
+        df = df[df["gt_px"] > 0]  # normal scans have no lesion to show
+        if len(df) == 0:
+            return
     d = df.sort_values("iou")
     picks = list(d.tail(k).itertuples(index=False))[::-1] + list(d.head(k).itertuples(index=False))
     fig, axes = plt.subplots(len(picks), 3, figsize=(9, 3 * len(picks)), squeeze=False)

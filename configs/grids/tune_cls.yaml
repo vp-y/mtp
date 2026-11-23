@@ -1,0 +1,37 @@
+# Tuning phase, classifier (Scenario A, ground-truth crops, 3 seeds, selection on mean VALIDATION AUC).
+#   python -m bus.grid configs/grids/tune_cls.yaml --out tuning
+#
+# Why these axes (error analysis of the reproduction, docs/TUNING.md):
+#   backbone  the three best configurations by validation AUC in the reproduction grid
+#   context   missed cancers were small lesions; the whole-image Swin beat our tight crop most on
+#             small lesions -> test how much surrounding tissue the classifier should see
+#             m0.1 = paper-style crop (+10 % per side), m0.5 = box x2, m1.0 = box x3, full = whole image
+#   finetune  the paper only unfreezes the last 10 parameter tensors; full fine-tuning with a 10x lower
+#             learning rate usually transfers better to a new image domain
+# 3 backbones x 4 contexts x 2 fine-tuning modes = 24 configurations x 3 seeds = 72 runs.
+task: cls
+base: configs/cls/base.yaml
+seeds: [42, 43, 44]
+set:
+  data.scenario: A      # crop square / min_size stay as in the reproduction, so
+                        # resnet50_mlp_d0.5_m0.1_k10 == the reproduction's best classifier (baseline)
+
+axes:
+  - - name: resnet50_mlp_d0.5
+      set: {model.backbone: resnet50, model.head: mlp, model.dropout: 0.5}
+    - name: densenet121_mlp_d0.0
+      set: {model.backbone: densenet121, model.head: mlp, model.dropout: 0.0}
+    - name: efficientnet_b0_linear_d0.5
+      set: {model.backbone: efficientnet_b0, model.head: linear, model.dropout: 0.5}
+  - - name: m0.1
+      set: {crop.margin: 0.1}
+    - name: m0.5
+      set: {crop.margin: 0.5}
+    - name: m1.0
+      set: {crop.margin: 1.0}
+    - name: full
+      set: {crop.full_image: true}
+  - - name: k10
+      set: {model.unfreeze_k: 10, train.lr: 1.0e-3}
+    - name: kall
+      set: {model.unfreeze_k: all, train.lr: 1.0e-4, train.weight_decay: 1.0e-4}

@@ -35,12 +35,16 @@ def postprocess(mask: np.ndarray, mode: str = "none", min_area: int = 0) -> np.n
 
 
 def mask_to_box(mask: np.ndarray, margin: float = 0.1, min_size: int = 16,
-                square: bool = False, component: str = "largest"):
+                square: bool = False, component: str = "largest", full_image: bool = False):
     """Bounding box (x0, y0, x1, y1) of the lesion plus a margin, clamped to the image.
 
+    margin: context added on EACH side as a fraction of the lesion box (0.5 -> box twice as large).
+    full_image: return the whole image whenever a lesion is present (context ablation, tuning phase).
     Returns None if the mask is empty (no lesion found).
     """
     m = mask.astype(bool)
+    if full_image:
+        return (0, 0, m.shape[1], m.shape[0]) if m.any() else None
     if component == "largest":
         m = keep_largest_component(m)
     ys, xs = np.nonzero(m)

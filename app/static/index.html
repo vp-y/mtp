@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breast Ultrasound Analysis</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e2e5ea;
+    --accent: #2f6fdb; --high: #c8372d; --high-bg: #fdecea; --low: #23804a; --low-bg: #e8f5ed;
+    --none: #5d6677; --none-bg: #eef0f3; --warn-bg: #fff6e0; --warn: #8a6100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+      --accent: #6b9cf0; --high: #ff7b70; --high-bg: #3a1f1d; --low: #5fd08c; --low-bg: #17301f;
+      --none: #9aa3b2; --none-bg: #242a35; --warn-bg: #33290f; --warn: #f0c45a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 16px 8px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center;
+          cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.over, #drop:hover { border-color: var(--accent); }
+  #drop strong { color: var(--accent); }
+  #drop small { color: var(--muted); display: block; margin-top: 4px; }
+  input[type=file] { display: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  figure { margin: 0; }
+  figure img { width: 100%; border-radius: 8px; background: #000; display: block; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button { border: 1px solid var(--line); background: transparent; color: var(--text);
+                 border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .badge { display: inline-block; padding: 6px 12px; border-radius: 8px; font-weight: 600; }
+  .high { background: var(--high-bg); color: var(--high); }
+  .low { background: var(--low-bg); color: var(--low); }
+  .none { background: var(--none-bg); color: var(--none); }
+  .meter { position: relative; height: 14px; border-radius: 7px; background: var(--none-bg); margin: 14px 0 4px; }
+  .meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: var(--accent); }
+  .meter .thr { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--text); }
+  .scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .big { font-size: 34px; font-weight: 700; margin: 10px 0 0; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 14px 0 0; font-size: 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+  .hidden { display: none; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line);
+             border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
+             vertical-align: -3px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #error { color: var(--high); }
+  footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 30px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Breast ultrasound lesion analysis</h1>
+  <p>Dual-stage deep learning: lesion segmentation, then benign / malignant classification of the lesion region.</p>
+</header>
+<main>
+  <div class="warn" id="disclaimer">Research prototype for a Master's thesis. Not a medical device: results must not be used for diagnosis or treatment decisions.</div>
+
+  <section class="panel">
+    <label id="drop" for="file">
+      <strong>Choose an ultrasound image</strong> or drop it here
+      <small>PNG, JPG, BMP or TIFF &middot; one B-mode image of a single breast region</small>
+    </label>
+    <input type="file" id="file" accept="image/*">
+    <p id="status" class="muted hidden"></p>
+    <p id="error" class="hidden"></p>
+  </section>
+
+  <section id="result" class="hidden grid">
+    <div class="panel">
+      <div class="tabs">
+        <button data-view="overlay" class="on">Lesion outline</button>
+        <button data-view="heatmap">Probability map</button>
+        <button data-view="original">Original</button>
+      </div>
+      <figure>
+        <img id="view" alt="analysed ultrasound image">
+        <figcaption id="caption"></figcaption>
+      </figure>
+    </div>
+    <div class="panel">
+      <span id="badge" class="badge"></span>
+      <div id="probBlock">
+        <p class="big" id="prob"></p>
+        <span class="muted">estimated probability of malignancy</span>
+        <div class="meter"><div class="fill" id="fill"></div><div class="thr" id="thr"></div></div>
+        <div class="scale"><span>0 %</span><span id="thrLabel"></span><span>100 %</span></div>
+      </div>
+      <dl>
+        <dt>Lesion area</dt><dd id="area"></dd>
+        <dt>Image size</dt><dd id="size"></dd>
+        <dt>Analysis time</dt><dd id="time"></dd>
+        <dt>Models</dt><dd id="models"></dd>
+      </dl>
+      <p class="muted" style="font-size:13px;margin-top:14px">The decision threshold was chosen on validation data
+        so that about 90 % of cancers are flagged; this means some benign lesions are flagged too.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="perf">
+    <strong>Reference performance</strong>
+    <p class="muted" id="perfText" style="margin:6px 0 0">Loading model information&hellip;</p>
+  </section>
+</main>
+<footer>Bruno, Macrì &amp; Dodaro (J. Med. Syst. 2025) dual-stage pipeline, reproduced and tuned on BUSI,
+  Breast-Lesions-USG and BUS-UCLM; externally tested on BUS-BRA.</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let images = {}, originalUrl = null;
+
+function show(el, on) { el.classList.toggle("hidden", !on); }
+function pct(x) { return (100 * x).toFixed(1) + " %"; }
+
+function setView(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
+  $("view").src = name === "original" ? originalUrl : images[name];
+  $("caption").textContent = {
+    overlay: "Segmented lesion (filled outline) and its bounding box.",
+    heatmap: "Pixel-wise lesion probability from the segmentation models.",
+    original: "Uploaded image."}[name];
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+
+async function analyse(file) {
+  if (!file) return;
+  show($("error"), false); show($("result"), false);
+  $("status").innerHTML = '<span class="spinner"></span>Analysing&hellip;'; show($("status"), true);
+  if (originalUrl) URL.revokeObjectURL(originalUrl);
+  originalUrl = URL.createObjectURL(file);
+  const form = new FormData(); form.append("file", file);
+  try {
+    const res = await fetch("/api/predict", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    render(data);
+  } catch (e) {
+    $("error").textContent = "Could not analyse the image: " + e.message; show($("error"), true);
+  } finally { show($("status"), false); }
+}
+
+function render(d) {
+  images = { overlay: d.overlay, heatmap: d.heatmap };
+  setView("overlay");
+  const badge = $("badge");
+  badge.textContent = d.decision; badge.className = "badge " + d.level;
+  show($("probBlock"), d.lesion_found);
+  if (d.lesion_found) {
+    $("prob").textContent = pct(d.prob_malignant);
+    $("fill").style.width = pct(d.prob_malignant).replace(" ", "");
+    $("fill").style.background = d.level === "high" ? "var(--high)" : "var(--low)";
+    $("thr").style.left = pct(d.threshold).replace(" ", "");
+    $("thrLabel").textContent = "threshold " + pct(d.threshold);
+  }
+  $("area").textContent = d.lesion_found ? d.lesion_area_pct + " % of the image" : "none found";
+  $("size").textContent = d.image_size[0] + " × " + d.image_size[1] + " px";
+  $("time").textContent = (d.elapsed_ms / 1000).toFixed(2) + " s";
+  const m = d.model || {};
+  $("models").textContent = `${(m.segmentation_models || []).length} segmentation + ${(m.classification_models || []).length} classification` + (m.tta ? " (with flip averaging)" : "");
+  show($("result"), true);
+}
+
+const drop = $("drop");
+$("file").addEventListener("change", (e) => analyse(e.target.files[0]));
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => analyse(e.dataTransfer.files[0]));
+
+fetch("/api/info").then(r => r.ok ? r.json() : Promise.reject(r)).then(info => {
+  if (info.disclaimer) $("disclaimer").textContent = info.disclaimer;
+  const rows = [];
+  const names = { "deploy/test": "held-out test set (BUSI + Breast-Lesions-USG + BUS-UCLM)",
+                  "A/test": "BUSI test set", "A/external": "BUS-BRA (other hospital, external)" };
+  for (const [k, v] of Object.entries(info.reference_metrics || {})) {
+    const c = v.classification || {};
+    if (c.auc == null) continue;
+    rows.push(`${names[k] || k}: AUC ${c.auc.toFixed(3)}, sensitivity ${pct(c.recall)}, specificity ${pct(c.specificity)} (n = ${c.n})`);
+  }
+  $("perfText").innerHTML = rows.length ? rows.join("<br>") : "No reference metrics stored in the model bundle.";
+}).catch(() => { $("perfText").textContent = "Model not loaded: check the server log and /api/health."; });
+</script>
+</body>
+</html>

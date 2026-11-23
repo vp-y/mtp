@@ -1,0 +1,24 @@
+# Tuning phase, segmentation (Scenario A, 3 seeds, selection on mean VALIDATION Dice).
+#   python -m bus.grid configs/grids/tune_seg.yaml --out tuning
+#
+# arch: the two best reproduction models (validation Dice 0.790 / 0.784, a tie with one seed).
+# aug:  geo   = the paper's geometric augmentation only
+#       photo = + photometric augmentation (brightness / contrast / gamma / speckle / blur) imitating
+#               other ultrasound machines (accuracy dropped on other hospitals' images)
+# 2 x 2 = 4 configurations x 3 seeds = 12 runs. unet_resnet34_c64_geo == the reproduction's best (baseline).
+task: seg
+base: configs/seg/base.yaml
+seeds: [42, 43, 44]
+set:
+  data.scenario: A
+
+axes:
+  - - name: unet_resnet34_c64
+      set: {model.arch: unet, model.encoder: resnet34, model.base_channels: 64}
+    - name: deeplabv3plus_resnet34_c64
+      set: {model.arch: deeplabv3plus, model.encoder: resnet34, model.base_channels: 64}
+  - - name: geo
+      set: {}
+    - name: photo
+      set:
+        augment.photometric: {p: 0.5, brightness: 0.2, contrast: 0.2, gamma: [0.7, 1.5], speckle: 0.15, blur: 0.2}

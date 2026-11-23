@@ -28,8 +28,34 @@ def best_run(root, metric: str = "segmentation.dice", role: str = "val", mode: s
              verbose: bool = True) -> str:
     """Run directory of the configuration with the best mean `metric` on `role` (default: val).
 
-    Model selection never looks at the test or external sets.
+    Model selection never looks at the test or external sets. With several seeds the
+    configuration is ranked by its MEAN over seeds, and its best single seed is returned.
     """
+    return best_runs(root, metric, role, mode, verbose)[0]
+
+
+def best_runs(root, metric: str = "segmentation.dice", role: str = "val", mode: str = "max",
+              verbose: bool = True) -> list:
+    """All seed run directories of the best configuration (best seed first): an ensemble."""
+    df = _scan(root, metric, role)
+    asc = mode == "min"
+    agg = df.groupby("name")["value"].agg(["mean", "std", "count"]).sort_values("mean", ascending=asc)
+    best = agg.index[0]
+    runs = df[df["name"] == best].sort_values("value", ascending=asc)["run"].tolist()
+    if verbose:
+        print(f"top configurations by {role} {metric} (mean over seeds):")
+        print(agg.head(10).round(4).to_string())
+        print(f"-> best: {best} ({len(runs)} seed run(s)); first: {runs[0]}")
+    return runs
+
+
+def rank(root, metric: str = "segmentation.dice", role: str = "val") -> pd.DataFrame:
+    """Mean / std / count of `metric` per configuration name (no printing)."""
+    df = _scan(root, metric, role)
+    return df.groupby("name")["value"].agg(["mean", "std", "count"]).sort_values("mean", ascending=False)
+
+
+def _scan(root, metric: str, role: str) -> pd.DataFrame:
     rows = []
     for p in Path(root).rglob(f"metrics_{role}.json"):
         r = load_json(p)
@@ -39,16 +65,35 @@ def best_run(root, metric: str = "segmentation.dice", role: str = "val", mode: s
         rows.append({"name": r.get("name"), "seed": r.get("seed"), "value": float(v), "run": str(p.parent)})
     if not rows:
         raise FileNotFoundError(f"no metrics_{role}.json with '{metric}' under {root}")
-    df = pd.DataFrame(rows)
-    asc = mode == "min"
-    agg = df.groupby("name")["value"].agg(["mean", "std", "count"]).sort_values("mean", ascending=asc)
-    best = agg.index[0]
-    run = df[df["name"] == best].sort_values("value", ascending=asc)["run"].iloc[0]
-    if verbose:
-        print(f"top configurations by {role} {metric}:")
-        print(agg.head(10).round(4).to_string())
-        print(f"-> best: {run}")
-    return run
+    return pd.DataFrame(rows)
+
+
+def compare(entries) -> pd.DataFrame:
+    """Side-by-side table of evaluations. entries: list of (label, metrics_json_path).
+
+    Includes the per-dataset AUC / recall when the evaluation covered several datasets.
+    """
+    rows = []
+    for label, path in entries:
+        r = load_json(path)
+        s, c = r.get("segmentation") or {}, r.get("classification") or {}
+        row = {"system": label, "role": r.get("role"), "n": r.get("n"),
+               "dice": s.get("dice"), "iou": s.get("iou"),
+               "auc": c.get("auc"), "sensitivity": c.get("recall"), "specificity": c.get("specificity"),
+               "f1": c.get("f1"), "accuracy": c.get("accuracy"), "threshold": c.get("threshold")}
+        for ds, sub in (r.get("by_dataset") or {}).items():
+            sc = sub.get("classification") or {}
+            row[f"auc[{ds}]"] = sc.get("auc")
+            row[f"sens[{ds}]"] = sc.get("recall")
+        ns = r.get("normal_scans")
+        if ns:
+            row["normal_clear_rate"] = ns["correctly_clear_rate"]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def to_markdown(df: pd.DataFrame) -> str:
+    return _md_table(df)
 
 
 def _flatten(path: Path) -> dict:

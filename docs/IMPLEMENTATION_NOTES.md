@@ -38,6 +38,10 @@ Segmentation and Classification*, J. Med. Syst. 49:162 (2025), doi:10.1007/s1091
    and counts these cases (`n_lesion_not_found`).
 6. **Segmentation in Scenario C**: models trained on BUSI are applied unchanged to Breast-Lesions-USG.
 7. **Plain U-Net**: no BatchNorm (the paper describes conv + ReLU only). Set `model.batch_norm: true` to add it.
+   He initialisation, as in the original U-Net paper. The first Kaggle run used PyTorch's default init and stopped at
+   epoch 11 with Dice 0, because early stopping and the LR schedule followed a validation Dice that was still 0.
+   The Table 1 grid therefore trains it for at least 30 epochs (`train.min_epochs`) and schedules on validation
+   loss (`train.monitor: loss`).
 8. **Batch size, max epochs, AMP**: 16 / 100 for segmentation, 32 / 100 for classification, with mixed
    precision on GPU. Early stopping usually ends training much earlier.
 

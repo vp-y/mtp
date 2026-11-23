@@ -41,6 +41,20 @@ class VanillaUNet(nn.Module):
         self.ups = nn.ModuleList(nn.ConvTranspose2d(ch[i] * 2, ch[i], 2, stride=2) for i in reversed(range(depth)))
         self.dec = nn.ModuleList(_double_conv(ch[i] * 2, ch[i], batch_norm) for i in reversed(range(depth)))
         self.head = nn.Conv2d(ch[0], 1, kernel_size=1)
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        """He (Kaiming) normal initialisation, as in the original U-Net paper (Ronneberger et al., 2015).
+        Without BatchNorm, PyTorch's default init lets the signal shrink through 23 conv layers and the
+        network gets stuck predicting background (Dice 0 for many epochs)."""
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                nn.init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skips = []

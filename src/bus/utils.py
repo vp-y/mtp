@@ -62,13 +62,18 @@ def save_yaml(obj, path) -> None:
 
 
 class EarlyStopping:
-    """Tracks the best value of a monitored metric; `stop` turns True after `patience` bad epochs."""
+    """Tracks the best value of a monitored metric; `stop` turns True after `patience` bad epochs.
 
-    def __init__(self, patience, mode: str = "max"):
-        self.patience, self.mode = patience, mode
-        self.best, self.bad = None, 0
+    `min_epochs`: never stop before this many epochs (models trained from scratch, such as the
+    plain U-Net, can sit at Dice 0 for a while before they start to learn).
+    """
+
+    def __init__(self, patience, mode: str = "max", min_epochs: int = 0):
+        self.patience, self.mode, self.min_epochs = patience, mode, int(min_epochs or 0)
+        self.best, self.bad, self.epochs = None, 0, 0
 
     def step(self, value: float) -> bool:
+        self.epochs += 1
         better = self.best is None or (value > self.best if self.mode == "max" else value < self.best)
         if better:
             self.best, self.bad = value, 0
@@ -78,7 +83,8 @@ class EarlyStopping:
 
     @property
     def stop(self) -> bool:
-        return self.patience is not None and self.bad >= self.patience
+        return (self.patience is not None and self.bad >= self.patience
+                and self.epochs >= self.min_epochs)
 
 
 class History:

@@ -24,3 +24,9 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# downloaded Kaggle outputs
+kaggle_outputs/
+
+# exported model bundle (large; uploaded separately, see docs/DEPLOYMENT.md)
+deploy_bundle/

@@ -17,8 +17,13 @@ from scipy.stats import binomtest, wilcoxon
 from sklearn.metrics import roc_auc_score
 
 
-def compare(a: pd.DataFrame, b: pd.DataFrame, threshold: float = 0.5, n_boot: int = 2000, seed: int = 0) -> dict:
+def compare(a: pd.DataFrame, b: pd.DataFrame, threshold: float = 0.5, n_boot: int = 2000, seed: int = 0,
+            threshold_b=None) -> dict:
+    """threshold: decision threshold of A (and of B unless threshold_b is given)."""
     m = a.merge(b, on="id", suffixes=("_a", "_b"))
+    if "label_a" in m:  # normal scans have no lesion: compare lesion images only
+        m = m[m["label_a"] != "normal"]
+    tb = threshold if threshold_b is None else threshold_b
     out = {"n_paired": int(len(m))}
     for k in ("dice", "iou"):
         if f"{k}_a" in m and f"{k}_b" in m:
@@ -32,7 +37,7 @@ def compare(a: pd.DataFrame, b: pd.DataFrame, threshold: float = 0.5, n_boot: in
         m = m[m["y_a"].isin([0, 1])]
         y = m["y_a"].to_numpy().astype(int)
         pa, pb = m["prob_a"].to_numpy(), m["prob_b"].to_numpy()
-        ca, cb = (pa >= threshold) == y, (pb >= threshold) == y
+        ca, cb = (pa >= threshold) == y, (pb >= tb) == y
         only_a, only_b = int((ca & ~cb).sum()), int((~ca & cb).sum())
         p_mcnemar = binomtest(min(only_a, only_b), only_a + only_b, 0.5).pvalue if only_a + only_b else 1.0
         entry = {"acc_a": float(ca.mean()), "acc_b": float(cb.mean()), "only_a_correct": only_a,
@@ -45,8 +50,9 @@ def compare(a: pd.DataFrame, b: pd.DataFrame, threshold: float = 0.5, n_boot: in
                 idx = rng.integers(0, len(y), len(y))
                 if len(np.unique(y[idx])) == 2:
                     diffs.append(roc_auc_score(y[idx], pa[idx]) - roc_auc_score(y[idx], pb[idx]))
-            lo, hi = np.percentile(diffs, [2.5, 97.5])
-            entry["auc_diff_ci95"] = [float(lo), float(hi)]
+            if diffs:
+                lo, hi = np.percentile(diffs, [2.5, 97.5])
+                entry["auc_diff_ci95"] = [float(lo), float(hi)]
         out["classification"] = entry
     return out
 

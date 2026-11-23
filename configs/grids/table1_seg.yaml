@@ -12,7 +12,16 @@ product:
 name_template: "{model_arch}_{model_encoder}_c{model_base_channels}"
 
 runs:
-  - name: vanilla_unet_c32      # the "traditional" U-Net described in the paper
+  - name: vanilla_unet_c32      # the "traditional" U-Net described in the paper (conv + ReLU, He init)
     set:
       model.arch: vanilla_unet
       model.base_channels: 32
+      train.min_epochs: 30      # trained from scratch: do not let early stopping end it at Dice 0
+      train.monitor: loss       # Dice is 0 for the first epochs, so LR schedule / stopping follow val loss
+  - name: vanilla_unet_bn_c32   # same, with BatchNorm (not in the paper; shows what BN adds)
+    set:
+      model.arch: vanilla_unet
+      model.base_channels: 32
+      model.batch_norm: true
+      train.min_epochs: 30
+      train.monitor: loss

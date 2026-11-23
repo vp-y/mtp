@@ -1,0 +1,13 @@
+# Web app (inference only, CPU is enough). Install torch first, CPU build:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# If loading the bundle fails, install the exact timm / segmentation-models-pytorch versions
+# recorded in deploy_bundle/bundle.json ("versions").
+fastapi>=0.100
+uvicorn>=0.23
+python-multipart>=0.0.6
+timm>=0.9.2
+segmentation-models-pytorch>=0.3.3
+opencv-python-headless>=4.8
+numpy
+pandas
+pyyaml

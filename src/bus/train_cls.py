@@ -79,7 +79,7 @@ def train_cls(cfg: dict, data_root, out_root="runs", smoke: bool = False) -> Pat
                            weight_decay=float(t.get("weight_decay", 0.0)))
     sch = t.get("scheduler", {})
     scheduler = ReduceLROnPlateau(opt, mode="max", factor=sch.get("factor", 0.1), patience=sch.get("patience", 3))
-    stopper = EarlyStopping(t.get("early_stopping", 10), "max")
+    stopper = EarlyStopping(t.get("early_stopping", 10), "max", t.get("min_epochs", 0))
     loss_fn = nn.BCEWithLogitsLoss()
     amp = Amp(device, t.get("amp", True))
     history = History(rd / "history.csv")

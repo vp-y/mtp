@@ -78,7 +78,7 @@ def train_seg(cfg: dict, data_root, out_root="runs", smoke: bool = False) -> Pat
     mode_ = "min" if monitor == "loss" else "max"
     sch = t.get("scheduler", {})
     scheduler = ReduceLROnPlateau(opt, mode=mode_, factor=sch.get("factor", 0.1), patience=sch.get("patience", 3))
-    stopper = EarlyStopping(t.get("early_stopping", 10), mode_)
+    stopper = EarlyStopping(t.get("early_stopping", 10), mode_, t.get("min_epochs", 0))
     loss_fn = CompositeSegLoss(**cfg.get("loss", {}))
     amp = Amp(device, t.get("amp", True))
     history = History(rd / "history.csv")
