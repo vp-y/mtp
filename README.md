@@ -17,6 +17,7 @@ Nothing is trained on your own computer.
 | 1. Reproduce the paper (Tables 1–3, baselines, statistics, external test) | `notebooks/kaggle_reproduce.ipynb` | done |
 | 2. Tuning: fix the plain U-Net, crop context, fine-tuning depth, more data, ensembles, threshold | `notebooks/kaggle_tuning.ipynb` | ready to run |
 | 3. Deployment: web API + browser UI, model bundle | `app/`, `Dockerfile`, `docs/DEPLOYMENT.md` | ready (needs the bundle from phase 2) |
+| 4. Dashboard: explainability (Grad-CAM, LIME, SHAP) + plain-language summary by a language model | `app/`, `src/bus/explain.py`, `src/bus/narrate.py`, `notebooks/kaggle_dashboard.ipynb`, `docs/EXPLAINABILITY.md` | ready (needs the bundle from phase 2) |
 
 ---
 
@@ -25,7 +26,7 @@ Nothing is trained on your own computer.
 2. [One-time setup: GitHub and the Kaggle dataset](#2-one-time-setup-github-and-the-kaggle-dataset)
 3. [Phase 1: reproduction on Kaggle](#3-phase-1-reproduction-on-kaggle)
 4. [Phase 2: tuning on Kaggle](#4-phase-2-tuning-on-kaggle)
-5. [Phase 3: deployment (web app)](#5-phase-3-deployment-web-app)
+5. [Phases 3–4: dashboard, explainability and deployment](#5-phases-34-dashboard-explainability-and-deployment)
 6. [Updating the code](#6-updating-the-code)
 7. [Command reference](#7-command-reference)
 8. [Troubleshooting](#8-troubleshooting)
@@ -134,10 +135,20 @@ for phase 3). Put them in `E:\MTP\kaggle_outputs\` (ignored by git).
 
 ---
 
-## 5. Phase 3: deployment (web app)
+## 5. Phases 3–4: dashboard, explainability and deployment
 
-The app (`app/server.py`) loads the bundle and serves a browser UI: upload an ultrasound image → lesion outline,
-probability map, probability of malignancy with the decision threshold, and a decision text.
+The dashboard (`app/server.py` + `app/static/index.html`) loads the bundle and has two areas:
+
+1. **Upload and prediction**: upload a USG image → lesion outline, lesion probability map, malignancy score
+   against the decision threshold, model agreement, warnings, and the explanations: **Grad-CAM** (always),
+   **LIME** and **Kernel SHAP** (on request), plus descriptive outline measurements.
+2. **Plain-language explanation**: a language model (Claude, via the Anthropic API) turns the explanation
+   metrics into text for a patient or a clinician, in English or another language. It receives only the
+   numbers, never the image. Without an `ANTHROPIC_API_KEY` a built-in template text is shown.
+
+Methods, metrics and limitations: **`docs/EXPLAINABILITY.md`**. Check everything on Kaggle with
+**`notebooks/kaggle_dashboard.ipynb`** (attach the finished tuning notebook as input; no training): unit tests, one
+image through the API, and the quantitative explanation evaluation (`xai_results.zip`).
 
 Short version (step-by-step details and the API in **`docs/DEPLOYMENT.md`**):
 
@@ -200,8 +211,11 @@ python -m bus.reporting best runs/seg/A --metric segmentation.dice
 python -m bus.reporting collect runs --out reports
 python -m bus.stats --a A/per_image_test.csv --b B/per_image_test.csv --names ours maskrcnn
 
-# Web app (inference only)
+# Web app / dashboard (inference only; ANTHROPIC_API_KEY optional)
 uvicorn app.server:app --host 0.0.0.0 --port 7860
+
+# Explanation quality on labelled images (Grad-CAM vs ground truth, LIME / SHAP deletion test)
+python -m bus.explain_eval --bundle deploy_bundle --scenario A --role external --n 120 --methods gradcam lime shap
 
 # Unit tests
 python -m pytest -q tests
@@ -228,6 +242,8 @@ Normal (lesion-free) scans are left out unless `data.include_normal=true` / `--i
 | `CUDA out of memory` | `--set train.batch_size=8` |
 | Session ended mid-run | Attach the previous output, run the *Resume* cell, re-run the cells (finished work is skipped) |
 | A grid run failed | The grid continues and prints `FAILED ...`; re-run it with `--only <name>` |
+| Dashboard: "Built-in template" instead of Claude | Set `ANTHROPIC_API_KEY` (Space: *Settings → Variables and secrets → New secret*); the note under the text says what failed |
+| LIME / SHAP slow on a CPU | Lower `BUS_XAI_SAMPLES` (e.g. 60), or untick them; Grad-CAM always runs |
 | App: "models not loaded" | `deploy_bundle/` missing or incomplete; check `/api/health`. If weights fail to load, install the `timm` / `segmentation-models-pytorch` versions listed in `deploy_bundle/bundle.json` |
 
 ---

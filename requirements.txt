@@ -14,6 +14,14 @@ matplotlib
 pyyaml
 pytest
 
+# dashboard (app/): web server, explanations, language-model summary
+fastapi>=0.100
+uvicorn>=0.23
+python-multipart>=0.0.6
+httpx
+scikit-image>=0.19
+anthropic>=2.0
+
 # only for scripts/data/ (rebuilding the dataset from the raw downloads)
 imagehash
 openpyxl

@@ -1,12 +1,30 @@
-# Deployment: web API + browser UI
+# Deployment: dashboard (web API + browser UI)
 
 The app loads a **model bundle** exported at the end of the tuning notebook (`deploy_bundle.zip`) and serves:
 
-- a browser page (`/`): upload an ultrasound image, see the lesion outline, the segmentation probability map,
-  the probability of malignancy against the decision threshold, and a decision text;
-- a JSON API (`/api/predict`) for other programs.
+- a **dashboard** (`/`) with two areas:
+  1. *Upload and prediction*: lesion outline, lesion probability map, malignancy score against the decision
+     threshold, model agreement, warnings, and the explanations Grad-CAM, LIME and Kernel SHAP;
+  2. *Plain-language explanation*: text written by a language model (Claude) from the explanation numbers,
+     for a patient or a clinician, in a chosen language. A template text is used if no API key is set;
+- a JSON API for other programs.
 
-CPU is enough: one image takes about 1–4 s, depending on the number of models in the ensemble and on TTA.
+CPU is enough. Prediction + Grad-CAM take about 2–6 s, and LIME or SHAP about 15–40 s each on a free 2-vCPU
+server (set `BUS_XAI_SAMPLES` lower to make them faster). The language model adds 5–20 s.
+Methods and metrics: `docs/EXPLAINABILITY.md`.
+
+## The language model (optional)
+
+1. Create an API key at https://console.anthropic.com (pay-as-you-go; one summary costs a few US cents).
+2. Give it to the app as the environment variable `ANTHROPIC_API_KEY`:
+   - Hugging Face Space: *Settings → Variables and secrets → New secret*, name `ANTHROPIC_API_KEY`;
+   - Docker: `docker run -e ANTHROPIC_API_KEY=... -p 7860:7860 bus-app`;
+   - plain Python: set the variable before starting `uvicorn`.
+3. The header of the dashboard shows "Explanations written by: claude-opus-5-5". Without a key it says
+   "template".
+
+Only the numeric report is sent to the API. Images, file names and the case label are not sent. The case
+label stays in the browser.
 
 > Research prototype. Not a medical device. Not for diagnosis or treatment decisions.
 
@@ -60,15 +78,24 @@ Environment variables: `BUS_BUNDLE` (bundle folder, default `./deploy_bundle`), 
 |---|---|---|
 | GET | `/api/health` | `{"status": "ok", "models_loaded": true, ...}` |
 | GET | `/api/info` | threshold, models, TTA, reference metrics, disclaimer |
-| POST | `/api/predict` | form field `file` = image (PNG / JPG / BMP / TIFF, max 20 MB) |
+| POST | `/api/predict` | form field `file` = image (PNG / JPG / BMP / TIFF, max 20 MB) → prediction, Grad-CAM, report, `case_id` |
+| POST | `/api/explain/{case_id}?method=lime\|shap` | region explanation (optional `samples`, `segments`) |
+| POST | `/api/summary/{case_id}` | JSON `{"language": "English", "audience": "patient" \| "clinician"}` → plain-language text |
+| GET | `/api/report/{case_id}` | full JSON report and the last summary |
+
+Cases are kept in server memory only (the 16 most recent) and are never written to disk.
 
 Example:
 ```bash
 curl -F "file=@scan.png" http://localhost:7860/api/predict
 ```
-Response fields: `lesion_found`, `prob_malignant` (null if no lesion), `threshold`, `decision`,
+`/api/predict` response fields: `case_id`, `lesion_found`, `prob_malignant` (null if no lesion), `threshold`, `decision`,
 `level` (`high` / `low` / `none`), `lesion_box` `[x0, y0, x1, y1]`, `lesion_area_pct`, `image_size`,
-`overlay` and `heatmap` (PNG data URLs), `elapsed_ms`, `model`, `disclaimer`.
+`overlay`, `heatmap` and `gradcam` (PNG data URLs), `report` (all explanation numbers), `elapsed_ms`, `model`,
+`disclaimer`.
+
+Environment variables: `BUS_BUNDLE`, `BUS_DEVICE`, `BUS_XAI_SAMPLES` (LIME / SHAP perturbations),
+`ANTHROPIC_API_KEY`, `BUS_LLM=off`, `BUS_LLM_MODEL`, `BUS_LLM_EFFORT`.
 
 Interactive API documentation is generated automatically at `/docs`.
 
@@ -84,6 +111,9 @@ Interactive API documentation is generated automatically at `/docs`.
    malignancy"; otherwise "Lesion with benign-looking features".
 
 ## Checked on Kaggle
+
+`notebooks/kaggle_dashboard.ipynb` (run after the tuning notebook, attaching its output) tests the explanation
+code and the whole dashboard API on BUS-BRA images, including LIME, SHAP and the summary.
 
 The last section of `notebooks/kaggle_tuning.ipynb` loads the exported bundle, runs it on a BUS-BRA image, and
 sends one request through FastAPI's test client to `/api/predict` and `/`, so the app code is verified before

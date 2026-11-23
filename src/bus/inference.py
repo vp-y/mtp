@@ -111,6 +111,23 @@ class ClsPredictor:
             x = torch.cat([x, torch.flip(x, dims=[3])])
         return float(torch.sigmoid(self.model(x)[:, 0].float()).mean())
 
+    def to_input(self, patch: np.ndarray) -> torch.Tensor:
+        """Grayscale patch -> (3, size, size) normalised tensor, exactly as the model was trained."""
+        img, _ = resize_to_square(patch, self.size, self.mode)
+        return to_tensor(img, 3)
+
+    @torch.no_grad()
+    def predict_patches(self, patches, batch_size: int = 32, tta: bool = False) -> np.ndarray:
+        """P(malignant) for many patches at once (used by the LIME / SHAP explanations)."""
+        out = []
+        for i in range(0, len(patches), batch_size):
+            x = torch.stack([self.to_input(p) for p in patches[i:i + batch_size]]).to(self.device)
+            p = torch.sigmoid(self.model(x)[:, 0].float())
+            if tta:
+                p = (p + torch.sigmoid(self.model(torch.flip(x, dims=[3]))[:, 0].float())) / 2
+            out.append(p.cpu().numpy())
+        return np.concatenate(out) if out else np.zeros(0, dtype=np.float32)
+
 
 class DualStagePipeline:
     """segment -> clean mask -> bounding box + margin -> crop -> classify.
@@ -135,12 +152,21 @@ class DualStagePipeline:
         self.seg, self.cls = self.segs[0], self.clss[0]  # settings / names come from the first model
         self.empty_policy, self.tta = empty_policy, bool(tta)
 
-    def segment(self, gray: np.ndarray):
-        prob_map = np.mean([s.predict_prob(gray, self.tta) for s in self.segs], axis=0)
+    def segment_members(self, gray: np.ndarray) -> list:
+        """Probability map of every segmentation model (before averaging)."""
+        return [s.predict_prob(gray, self.tta) for s in self.segs]
+
+    def combine(self, prob_maps: list):
+        """Average member maps -> (prob_map, cleaned binary mask)."""
+        prob_map = np.mean(prob_maps, axis=0)
         mask = postprocess(prob_map >= self.seg.threshold, self.seg.post, self.seg.min_area)
         return prob_map, mask
 
-    def classify(self, gray: np.ndarray, mask: np.ndarray) -> float:
+    def segment(self, gray: np.ndarray):
+        return self.combine(self.segment_members(gray))
+
+    def classify_members(self, gray: np.ndarray, mask: np.ndarray) -> list:
+        """P(malignant) of every classification model (before averaging)."""
         probs = []
         for c in self.clss:
             box = c.box(mask)
@@ -150,7 +176,10 @@ class DualStagePipeline:
                 probs.append(c.predict_patch(gray, self.tta))
             else:
                 probs.append(0.0)
-        return float(np.mean(probs))
+        return probs
+
+    def classify(self, gray: np.ndarray, mask: np.ndarray) -> float:
+        return float(np.mean(self.classify_members(gray, mask)))
 
     def __call__(self, gray: np.ndarray) -> dict:
         prob_map, mask = self.segment(gray)

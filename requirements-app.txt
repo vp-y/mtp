@@ -11,3 +11,7 @@ opencv-python-headless>=4.8
 numpy
 pandas
 pyyaml
+# explanations: superpixels for LIME / SHAP (a grid is used if missing)
+scikit-image>=0.19
+# plain-language summary written by Claude (optional: set ANTHROPIC_API_KEY; without it a template is used)
+anthropic>=2.0

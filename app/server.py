@@ -1,17 +1,23 @@
-"""Web app: upload a breast ultrasound image -> lesion outline + probability of malignancy.
+"""Dashboard backend: upload a breast ultrasound image -> prediction, explanations, plain-language summary.
 
 Run (from the repository root, with the app requirements installed):
     uvicorn app.server:app --host 0.0.0.0 --port 7860
 then open http://localhost:7860
 
 Environment variables:
-    BUS_BUNDLE   folder exported by `python -m bus.bundle export` (default: ./deploy_bundle)
-    BUS_DEVICE   cpu | cuda (default: cuda if available)
+    BUS_BUNDLE         folder exported by `python -m bus.bundle export` (default: ./deploy_bundle)
+    BUS_DEVICE         cpu | cuda (default: cuda if available)
+    BUS_XAI_SAMPLES    perturbations for LIME / SHAP (default 120 on CPU, 300 on GPU)
+    ANTHROPIC_API_KEY  enables the language-model summary (see bus/narrate.py); without it a template is used
+    BUS_LLM, BUS_LLM_MODEL, BUS_LLM_EFFORT   see bus/narrate.py
 
-API:
-    GET  /api/health    is the model loaded?
-    GET  /api/info      model settings and the reference metrics stored in the bundle
-    POST /api/predict   multipart form field "file" (PNG / JPG / BMP / TIFF ultrasound image)
+API (one "case" per uploaded image, kept in memory only, never written to disk):
+    GET  /api/health                  is the model loaded?
+    GET  /api/info                    model settings, reference metrics, language-model status
+    POST /api/predict                 form field "file" -> prediction + Grad-CAM + report, returns case_id
+    POST /api/explain/{case_id}       ?method=lime|shap -> region-based explanation
+    POST /api/summary/{case_id}       JSON {"language": "English", "audience": "patient"|"clinician"}
+    GET  /api/report/{case_id}        the full JSON report of a case
 
 RESEARCH PROTOTYPE - not a medical device, not for clinical decisions.
 """
@@ -23,28 +29,36 @@ import os
 import sys
 import threading
 import time
+import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:  # allow running without `pip install -e .`
     sys.path.insert(0, str(ROOT / "src"))
 
+from bus import explain as xai  # noqa: E402
+from bus import narrate  # noqa: E402
 from bus.bundle import load_bundle  # noqa: E402
 
 BUNDLE = Path(os.environ.get("BUS_BUNDLE", ROOT / "deploy_bundle"))
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_BYTES = 20 * 2 ** 20
 MAX_SIDE = 1600  # larger images are downscaled first (the models work at 224-256 px anyway)
+MAX_CASES = 16   # most recent cases kept in memory for the explain / summary steps
 DISCLAIMER = ("Research prototype for a Master's thesis. Not a medical device. Results must not be used "
               "for diagnosis or treatment decisions; every image needs review by a qualified clinician.")
 
-_lock = threading.Lock()
+_lock = threading.Lock()          # one model computation at a time (predictable memory on small servers)
+_cases_lock = threading.Lock()
+_cases: "OrderedDict[str, dict]" = OrderedDict()
 _state = {"pipe": None, "settings": None, "error": None}
 
 
@@ -60,14 +74,30 @@ def _load():
     return _state["pipe"]
 
 
+def _pipe():
+    pipe = _load()
+    if pipe is None:
+        raise HTTPException(503, f"models not loaded: {_state['error']}")
+    return pipe
+
+
 @asynccontextmanager
 async def _lifespan(_app):
     _load()  # load the models once, when the server starts
     yield
 
 
-app = FastAPI(title="Breast ultrasound lesion analysis", version="1.0", lifespan=_lifespan,
-              description="Dual-stage segmentation + classification (research prototype).")
+app = FastAPI(title="Breast ultrasound lesion analysis", version="2.0", lifespan=_lifespan,
+              description="Dual-stage segmentation + classification with explanations (research prototype).")
+
+
+def _threshold() -> float:
+    return float((_state["settings"] or {}).get("threshold", 0.5))
+
+
+def _xai_samples():
+    v = os.environ.get("BUS_XAI_SAMPLES")
+    return int(v) if v else None
 
 
 def _public_settings() -> dict:
@@ -76,25 +106,6 @@ def _public_settings() -> dict:
             "segmentation_models": [m.get("name") for m in s.get("seg", [])],
             "classification_models": [m.get("name") for m in s.get("cls", [])],
             "created": s.get("created"), "notes": s.get("notes"), "versions": s.get("versions")}
-
-
-@app.get("/")
-def index():
-    return FileResponse(STATIC / "index.html")
-
-
-@app.get("/api/health")
-def health():
-    return {"status": "ok" if _state["pipe"] is not None else "error", "models_loaded": _state["pipe"] is not None,
-            "bundle": str(BUNDLE), "error": _state["error"]}
-
-
-@app.get("/api/info")
-def info():
-    if _load() is None:
-        raise HTTPException(503, f"models not loaded: {_state['error']}")
-    return _finite({**_public_settings(), "reference_metrics": (_state["settings"] or {}).get("metrics", {}),
-                    "disclaimer": DISCLAIMER})
 
 
 def _finite(o):
@@ -136,11 +147,58 @@ def _heatmap(gray: np.ndarray, prob_map: np.ndarray) -> np.ndarray:
     return cv2.addWeighted(heat, 0.45, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR), 0.55, 0)
 
 
+# --------------------------------------------------------------------------------------------- cases
+
+def _store(case: dict) -> str:
+    cid = uuid.uuid4().hex
+    with _cases_lock:
+        _cases[cid] = case
+        while len(_cases) > MAX_CASES:
+            _cases.popitem(last=False)
+    return cid
+
+
+def _case(cid: str) -> dict:
+    with _cases_lock:
+        case = _cases.get(cid)
+        if case is not None:
+            _cases.move_to_end(cid)
+    if case is None:
+        raise HTTPException(404, "case not found (cases are kept in memory only; upload the image again)")
+    return case
+
+
+def _refresh_report(case: dict) -> dict:
+    case["report"] = xai.build_report(_pipe(), case["analysis"], _state["settings"] or {}, case["explanations"])
+    return case["report"]
+
+
+# -------------------------------------------------------------------------------------------- routes
+
+@app.get("/")
+def index():
+    return FileResponse(STATIC / "index.html")
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok" if _state["pipe"] is not None else "error", "models_loaded": _state["pipe"] is not None,
+            "bundle": str(BUNDLE), "error": _state["error"]}
+
+
+@app.get("/api/info")
+def info():
+    pipe = _pipe()
+    return _finite({**_public_settings(), "reference_metrics": (_state["settings"] or {}).get("metrics", {}),
+                    "llm": narrate.status(),
+                    "explanations": {"methods": ["gradcam", "lime", "shap"],
+                                     "samples": _xai_samples() or xai.default_samples(pipe.cls.device)},
+                    "disclaimer": DISCLAIMER})
+
+
 @app.post("/api/predict")
-def predict(file: UploadFile = File(...)):
-    pipe = _load()
-    if pipe is None:
-        raise HTTPException(503, f"models not loaded: {_state['error']}")
+def predict(file: UploadFile = File(...), gradcam: bool = Query(True)):
+    pipe = _pipe()
     data = file.file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "image larger than 20 MB")
@@ -152,32 +210,78 @@ def predict(file: UploadFile = File(...)):
         s = MAX_SIDE / max(h, w)
         gray = cv2.resize(gray, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
 
+    thr = _threshold()
     t0 = time.time()
-    with _lock:  # one inference at a time keeps memory use predictable on small servers
-        out = pipe(gray)
-    elapsed = (time.time() - t0) * 1000
-    thr = float(_state["settings"]["threshold"])
-    p = float(out["prob_malignant"])
-    found = bool(out["lesion_found"])
-    if not found:
-        decision, level = "No lesion detected", "none"
-    elif p >= thr:
-        decision, level = "Suspicious for malignancy: further assessment recommended", "high"
-    else:
-        decision, level = "Lesion with benign-looking features", "low"
-    mask = out["mask"]
+    with _lock:
+        a = xai.analyse(pipe, gray)
+        t_pred = time.time()
+        cam = xai.gradcam(pipe, a, thr) if gradcam else None
+    elapsed = (t_pred - t0) * 1000
+    case = {"analysis": a, "explanations": {}, "created": time.time(), "name": file.filename}
+    images = {"overlay": None, "heatmap": None, "gradcam": None}
+    if cam is not None:
+        case["explanations"]["gradcam"] = {"metrics": cam["metrics"]}
+        images["gradcam"] = _png_data_url(xai.render_cam(gray, cam["map"], a["box"]))
+    report = _refresh_report(case)
+    cid = _store(case)
+
+    p, found = float(a["prob_malignant"]), bool(a["lesion_found"])
+    pr = report["prediction"]
+    mask = a["mask"]
+    images["overlay"] = _png_data_url(_overlay(gray, mask, a["lesion_box"], found and p >= thr))
+    images["heatmap"] = _png_data_url(_heatmap(gray, a["prob_map"]))
     return {
+        "case_id": cid,
         "lesion_found": found,
         "prob_malignant": p if found else None,
         "threshold": thr,
-        "decision": decision,
-        "level": level,
-        "lesion_box": [int(v) for v in out["lesion_box"]] if found else None,
+        "decision": pr["decision"],
+        "level": pr["level"],
+        "lesion_box": [int(v) for v in a["lesion_box"]] if found else None,
         "lesion_area_pct": round(100.0 * float(mask.mean()), 2),
         "image_size": [int(gray.shape[1]), int(gray.shape[0])],
-        "overlay": _png_data_url(_overlay(gray, mask, out["lesion_box"], found and p >= thr)),
-        "heatmap": _png_data_url(_heatmap(gray, out["prob_map"])),
+        "overlay": images["overlay"],
+        "heatmap": images["heatmap"],
+        "gradcam": images["gradcam"],
         "elapsed_ms": round(elapsed),
+        "explain_ms": round((time.time() - t_pred) * 1000),
+        "report": report,
         "model": _public_settings(),
         "disclaimer": DISCLAIMER,
     }
+
+
+@app.post("/api/explain/{case_id}")
+def explain(case_id: str, method: str = Query("lime", pattern="^(lime|shap)$"),
+            samples: Optional[int] = Query(None, ge=16, le=2000), segments: int = Query(30, ge=6, le=120)):
+    pipe = _pipe()
+    case = _case(case_id)
+    a = case["analysis"]
+    if not a["lesion_found"]:
+        raise HTTPException(409, "no lesion found: there is no classification to explain")
+    t0 = time.time()
+    with _lock:
+        res = xai.attribution(pipe, a, _threshold(), method, n_samples=samples or _xai_samples(),
+                              n_segments=segments)
+    case["explanations"][method] = {"metrics": res["metrics"]}
+    report = _refresh_report(case)
+    return {"case_id": case_id, "method": method,
+            "image": _png_data_url(xai.render_attribution(a["gray"], res["map"], res["region_box"], a["mask"])),
+            "metrics": report["explanations"][method], "report": report,
+            "elapsed_ms": round((time.time() - t0) * 1000)}
+
+
+@app.post("/api/summary/{case_id}")
+def summary(case_id: str, body: dict = Body(default={})):
+    case = _case(case_id)
+    language = str(body.get("language") or "English")
+    audience = str(body.get("audience") or "patient")
+    out = narrate.summarize(case["report"], language=language, audience=audience)
+    case["summary"] = out
+    return {"case_id": case_id, **out, "disclaimer": DISCLAIMER}
+
+
+@app.get("/api/report/{case_id}")
+def report(case_id: str):
+    case = _case(case_id)
+    return {"case_id": case_id, "report": case["report"], "summary": case.get("summary")}

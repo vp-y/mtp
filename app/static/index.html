@@ -3,195 +3,526 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Breast Ultrasound Analysis</title>
+<title>Breast Ultrasound Dashboard</title>
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e2e5ea;
-    --accent: #2f6fdb; --high: #c8372d; --high-bg: #fdecea; --low: #23804a; --low-bg: #e8f5ed;
-    --none: #5d6677; --none-bg: #eef0f3; --warn-bg: #fff6e0; --warn: #8a6100;
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e1e5eb; --soft: #eef1f5;
+    --accent: #2f6fdb; --accent-ink: #ffffff;
+    --high: #c8372d; --high-bg: #fdecea; --low: #23804a; --low-bg: #e8f5ed; --none: #5d6677; --none-bg: #eef0f3;
+    --warn-bg: #fff6e0; --warn: #8a6100; --pos: #d9473a; --neg: #2f7fd6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
-      --accent: #6b9cf0; --high: #ff7b70; --high-bg: #3a1f1d; --low: #5fd08c; --low-bg: #17301f;
-      --none: #9aa3b2; --none-bg: #242a35; --warn-bg: #33290f; --warn: #f0c45a;
+      --bg: #11141a; --panel: #1a1f28; --text: #e6e9ef; --muted: #9aa3b2; --line: #2b323e; --soft: #222833;
+      --accent: #6b9cf0; --accent-ink: #0d1117;
+      --high: #ff7b70; --high-bg: #3a1f1d; --low: #5fd08c; --low-bg: #17301f; --none: #9aa3b2; --none-bg: #242a35;
+      --warn-bg: #33290f; --warn: #f0c45a; --pos: #ff7b70; --neg: #6aaaf5;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { padding: 20px 16px 8px; max-width: 1100px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  header p { margin: 0; color: var(--muted); }
-  main { max-width: 1100px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
-  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
-  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center;
-          cursor: pointer; transition: border-color .15s, background .15s; }
+  header { max-width: 1320px; margin: 0 auto; padding: 18px 16px 6px; display: flex; flex-wrap: wrap;
+           gap: 10px 20px; align-items: flex-end; justify-content: space-between; }
+  h1 { font-size: 21px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted);
+          background: var(--panel); }
+  .pill b { color: var(--text); font-weight: 600; }
+  .warn { max-width: 1320px; margin: 8px auto 0; padding: 0 16px; }
+  .warn div { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 9px 14px; font-size: 13px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 16px;
+         grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .step { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+          background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; }
+  #explainPanel { position: sticky; top: 12px; }
+  @media (max-width: 960px) { #explainPanel { position: static; } }
+
+  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px 16px; text-align: center; cursor: pointer;
+          transition: border-color .15s; display: flex; gap: 14px; align-items: center; justify-content: center; }
   #drop.over, #drop:hover { border-color: var(--accent); }
   #drop strong { color: var(--accent); }
-  #drop small { color: var(--muted); display: block; margin-top: 4px; }
+  #drop small { color: var(--muted); display: block; }
+  #thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: #000; }
   input[type=file] { display: none; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-  figure { margin: 0; }
-  figure img { width: 100%; border-radius: 8px; background: #000; display: block; }
-  figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
-  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-  .tabs button { border: 1px solid var(--line); background: transparent; color: var(--text);
-                 border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 13px; }
-  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; margin-top: 12px; }
+  .opts label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+  .opts input[type=text], select { font: inherit; font-size: 14px; color: var(--text); background: var(--panel);
+          border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; }
+  .checks { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 14px; color: var(--text); }
+  .checks label { display: flex; gap: 6px; align-items: center; color: var(--text); font-size: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  #history { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  #history button { font-size: 12px; padding: 3px 10px; border-radius: 999px; }
+  #history button.on { border-color: var(--accent); color: var(--accent); }
+
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 640px) { .top { grid-template-columns: 1fr; } }
   .badge { display: inline-block; padding: 6px 12px; border-radius: 8px; font-weight: 600; }
   .high { background: var(--high-bg); color: var(--high); }
   .low { background: var(--low-bg); color: var(--low); }
   .none { background: var(--none-bg); color: var(--none); }
-  .meter { position: relative; height: 14px; border-radius: 7px; background: var(--none-bg); margin: 14px 0 4px; }
-  .meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: var(--accent); }
+  .big { font-size: 32px; font-weight: 700; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+  .meter { position: relative; height: 12px; border-radius: 6px; background: var(--soft); margin: 12px 0 4px; }
+  .meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 6px; }
   .meter .thr { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--text); }
   .scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
-  .big { font-size: 34px; font-weight: 700; margin: 10px 0 0; }
-  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 14px 0 0; font-size: 14px; }
-  dt { color: var(--muted); }
-  dd { margin: 0; overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--soft); border-radius: 10px; padding: 10px 12px; }
+  .stat span { display: block; color: var(--muted); font-size: 12px; }
+  .stat b { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tabs button { border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  figure { margin: 0; }
+  figure img { width: 100%; max-height: 560px; object-fit: contain; border-radius: 8px; background: #000; display: block; }
+  figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  .bars { display: grid; gap: 6px; margin: 6px 0 2px; }
+  .bar { display: grid; grid-template-columns: 130px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; }
+  .bar .track { height: 8px; background: var(--soft); border-radius: 4px; overflow: hidden; }
+  .bar .track i { display: block; height: 100%; background: var(--accent); }
+  .bar em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .xai { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+  .xai:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .xai h3 { font-size: 14px; margin: 0 0 4px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .xai p { margin: 4px 0; font-size: 13px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); }
+  ul.flags { margin: 0; padding-left: 18px; font-size: 14px; }
+  ul.flags li { margin: 3px 0; }
+
+  #summary { font-size: 15px; line-height: 1.6; }
+  #summary h3 { font-size: 15px; margin: 16px 0 4px; }
+  #summary h3:first-child { margin-top: 0; }
+  #summary p { margin: 6px 0; }
+  #summary ul, #summary ol { margin: 6px 0; padding-left: 20px; }
+  .chip { font-size: 12px; color: var(--muted); background: var(--soft); border-radius: 999px; padding: 2px 9px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .muted { color: var(--muted); }
-  .hidden { display: none; }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line);
+  .hidden { display: none !important; }
+  .placeholder { color: var(--muted); font-size: 14px; padding: 24px 4px; text-align: center; }
+  .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid var(--line);
              border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
              vertical-align: -3px; margin-right: 8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #error { color: var(--high); }
-  footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 30px; color: var(--muted); font-size: 12px; }
+  .error { color: var(--high); font-size: 14px; }
+  footer { max-width: 1320px; margin: 0 auto; padding: 0 16px 30px; color: var(--muted); font-size: 12px; }
+  .printhead { display: none; }
+  @media print {
+    body { background: #fff; color: #000; }
+    header .pills, #uploadPanel, .tabs, button, .no-print { display: none !important; }
+    main { display: block; }
+    .panel { border: 1px solid #bbb; break-inside: avoid; margin-bottom: 12px; }
+    #explainPanel { position: static; }
+    .printhead { display: block; font-size: 13px; margin-bottom: 8px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Breast ultrasound lesion analysis</h1>
-  <p>Dual-stage deep learning: lesion segmentation, then benign / malignant classification of the lesion region.</p>
+  <div>
+    <h1>Breast ultrasound analysis dashboard</h1>
+    <p>Lesion segmentation, benign / malignant classification, explainability (Grad-CAM, LIME, SHAP) and a plain-language summary.</p>
+  </div>
+  <div class="pills">
+    <span class="pill">Models: <b id="pillModels">loading&hellip;</b></span>
+    <span class="pill">Explanations written by: <b id="pillLlm">&hellip;</b></span>
+  </div>
 </header>
+<div class="warn"><div id="disclaimer">Research prototype for a Master's thesis. Not a medical device: results must not be used for diagnosis or treatment decisions.</div></div>
+
 <main>
-  <div class="warn" id="disclaimer">Research prototype for a Master's thesis. Not a medical device: results must not be used for diagnosis or treatment decisions.</div>
+  <div class="col">
+    <!-- 1. upload -->
+    <section class="panel" id="uploadPanel">
+      <h2><span class="step">1</span>Upload an ultrasound image</h2>
+      <label id="drop" for="file">
+        <img id="thumb" class="hidden" alt="">
+        <span><strong id="dropText">Choose a USG image</strong> or drop it here
+          <small>PNG, JPG, BMP or TIFF &middot; one B-mode image of a single breast region &middot; max 20 MB</small></span>
+      </label>
+      <input type="file" id="file" accept="image/*">
+      <div class="opts">
+        <label>Case label (optional, stays in this browser)
+          <input type="text" id="label" maxlength="60" placeholder="e.g. Case 12, left breast"></label>
+        <label>Explanation for
+          <select id="audience"><option value="patient">Patient / family (plain words)</option>
+            <option value="clinician">Clinician (technical)</option></select></label>
+        <label>Language
+          <select id="language">
+            <option>English</option><option>Hindi</option><option>Bengali</option><option>Marathi</option>
+            <option>Tamil</option><option>Telugu</option><option>Gujarati</option><option>Kannada</option>
+            <option>Odia</option><option>Spanish</option><option>French</option></select></label>
+        <label>Extra explanation methods
+          <span class="checks"><label><input type="checkbox" id="useLime" checked> LIME</label>
+            <label><input type="checkbox" id="useShap"> SHAP</label></span></label>
+      </div>
+      <div class="row">
+        <button class="primary" id="submit" disabled>Analyse image</button>
+        <span id="status" class="muted"></span>
+      </div>
+      <p id="error" class="error hidden"></p>
+      <div id="history"></div>
+    </section>
 
-  <section class="panel">
-    <label id="drop" for="file">
-      <strong>Choose an ultrasound image</strong> or drop it here
-      <small>PNG, JPG, BMP or TIFF &middot; one B-mode image of a single breast region</small>
-    </label>
-    <input type="file" id="file" accept="image/*">
-    <p id="status" class="muted hidden"></p>
-    <p id="error" class="hidden"></p>
-  </section>
+    <!-- prediction -->
+    <section class="panel hidden" id="predPanel">
+      <div class="printhead" id="printHead"></div>
+      <h2><span class="step">2</span>Prediction</h2>
+      <div class="top">
+        <div>
+          <span id="badge" class="badge"></span>
+          <div id="scoreBlock">
+            <p class="big" id="score"></p>
+            <span class="muted" style="font-size:13px">malignancy score (0 to 1), compared with the decision threshold</span>
+            <div class="meter"><div class="fill" id="fill"></div><div class="thr" id="thr"></div></div>
+            <div class="scale"><span>0</span><span id="thrLabel"></span><span>1</span></div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>Lesion area</span><b id="sArea">&ndash;</b></div>
+          <div class="stat"><span>Models above threshold</span><b id="sVotes">&ndash;</b></div>
+          <div class="stat"><span>Outline confidence</span><b id="sConf">&ndash;</b></div>
+          <div class="stat"><span>Analysis time</span><b id="sTime">&ndash;</b></div>
+        </div>
+      </div>
+      <div id="flagsBox" class="hidden" style="margin-top:14px">
+        <strong style="font-size:14px">Points to keep in mind</strong>
+        <ul class="flags" id="flags"></ul>
+      </div>
+    </section>
 
-  <section id="result" class="hidden grid">
-    <div class="panel">
-      <div class="tabs">
+    <!-- images -->
+    <section class="panel hidden" id="viewPanel">
+      <h2>Images</h2>
+      <div class="tabs" id="tabs">
         <button data-view="overlay" class="on">Lesion outline</button>
-        <button data-view="heatmap">Probability map</button>
+        <button data-view="heatmap">Lesion probability</button>
+        <button data-view="gradcam">Grad-CAM</button>
+        <button data-view="lime">LIME</button>
+        <button data-view="shap">SHAP</button>
         <button data-view="original">Original</button>
       </div>
       <figure>
         <img id="view" alt="analysed ultrasound image">
         <figcaption id="caption"></figcaption>
+        <div class="legend" id="legend"></div>
       </figure>
-    </div>
-    <div class="panel">
-      <span id="badge" class="badge"></span>
-      <div id="probBlock">
-        <p class="big" id="prob"></p>
-        <span class="muted">estimated probability of malignancy</span>
-        <div class="meter"><div class="fill" id="fill"></div><div class="thr" id="thr"></div></div>
-        <div class="scale"><span>0 %</span><span id="thrLabel"></span><span>100 %</span></div>
-      </div>
-      <dl>
-        <dt>Lesion area</dt><dd id="area"></dd>
-        <dt>Image size</dt><dd id="size"></dd>
-        <dt>Analysis time</dt><dd id="time"></dd>
-        <dt>Models</dt><dd id="models"></dd>
-      </dl>
-      <p class="muted" style="font-size:13px;margin-top:14px">The decision threshold was chosen on validation data
-        so that about 90 % of cancers are flagged; this means some benign lesions are flagged too.</p>
-    </div>
-  </section>
+    </section>
 
-  <section class="panel" id="perf">
-    <strong>Reference performance</strong>
-    <p class="muted" id="perfText" style="margin:6px 0 0">Loading model information&hellip;</p>
-  </section>
+    <!-- explainability metrics -->
+    <section class="panel hidden" id="xaiPanel">
+      <h2>Explainability details</h2>
+      <div class="xai" id="xGradcam"></div>
+      <div class="xai" id="xLime"></div>
+      <div class="xai" id="xShap"></div>
+      <div class="xai" id="xLesion"></div>
+    </section>
+
+    <section class="panel" id="perf">
+      <strong style="font-size:14px">Reference performance of this model</strong>
+      <p class="muted" id="perfText" style="margin:6px 0 0;font-size:14px">Loading model information&hellip;</p>
+    </section>
+  </div>
+
+  <!-- 3. plain-language explanation -->
+  <div class="col">
+    <section class="panel" id="explainPanel">
+      <h2><span class="step">3</span>Explanation in plain language</h2>
+      <div class="row" style="margin-top:0;justify-content:space-between">
+        <span id="source" class="chip hidden"></span>
+        <span class="no-print" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="regen" disabled>Rewrite</button>
+          <button id="copy" disabled>Copy</button>
+          <button id="print" disabled>Print / PDF</button>
+        </span>
+      </div>
+      <div id="summary" style="margin-top:12px"><p class="placeholder">Upload an image and press <b>Analyse image</b>.
+        The prediction appears on the left; an explanation that anyone can read appears here.</p></div>
+      <p class="note" id="summaryNote"></p>
+      <p class="note">This text is generated automatically from the numbers on the left. It can contain mistakes and
+        is not medical advice.</p>
+    </section>
+  </div>
 </main>
 <footer>Bruno, Macrì &amp; Dodaro (J. Med. Syst. 2025) dual-stage pipeline, reproduced and tuned on BUSI,
-  Breast-Lesions-USG and BUS-UCLM; externally tested on BUS-BRA.</footer>
+  Breast-Lesions-USG and BUS-UCLM; externally tested on BUS-BRA. Explanations: Grad-CAM (Selvaraju et al. 2017),
+  LIME (Ribeiro et al. 2016), Kernel SHAP (Lundberg &amp; Lee 2017).</footer>
 
 <script>
 const $ = (id) => document.getElementById(id);
-let images = {}, originalUrl = null;
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const pct = (x, d = 0) => x == null ? "–" : (100 * x).toFixed(d) + " %";
+const num = (x, d = 2) => x == null ? "–" : Number(x).toFixed(d);
+const show = (el, on) => el.classList.toggle("hidden", !on);
 
-function show(el, on) { el.classList.toggle("hidden", !on); }
-function pct(x) { return (100 * x).toFixed(1) + " %"; }
+let INFO = {}, file = null, cases = [], current = null, busy = false, view = "overlay";
 
-function setView(name) {
-  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
-  $("view").src = name === "original" ? originalUrl : images[name];
-  $("caption").textContent = {
-    overlay: "Segmented lesion (filled outline) and its bounding box.",
-    heatmap: "Pixel-wise lesion probability from the segmentation models.",
-    original: "Uploaded image."}[name];
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* not JSON */ }
+  if (!res.ok) throw new Error((data && data.detail) || res.statusText || ("HTTP " + res.status));
+  return data;
 }
-document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+function setStatus(html) { $("status").innerHTML = html || ""; }
+function setError(msg) { $("error").textContent = msg || ""; show($("error"), !!msg); }
+function setBusy(on) {
+  busy = on;
+  $("submit").disabled = on || !file;
+  ["regen"].forEach(id => $(id).disabled = on || !current);
+  document.querySelectorAll("[data-run]").forEach(b => b.disabled = on);
+}
 
-async function analyse(file) {
-  if (!file) return;
-  show($("error"), false); show($("result"), false);
-  $("status").innerHTML = '<span class="spinner"></span>Analysing&hellip;'; show($("status"), true);
-  if (originalUrl) URL.revokeObjectURL(originalUrl);
-  originalUrl = URL.createObjectURL(file);
+// ------------------------------------------------------------------ file selection
+function pick(f) {
+  if (!f) return;
+  if (!f.type.startsWith("image/") && !/\.(png|jpe?g|bmp|tiff?)$/i.test(f.name)) { setError("Please choose an image file."); return; }
+  file = f; setError("");
+  $("thumb").src = URL.createObjectURL(f); show($("thumb"), true);
+  $("dropText").textContent = f.name;
+  $("submit").disabled = busy;
+}
+const drop = $("drop");
+$("file").addEventListener("change", e => pick(e.target.files[0]));
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => pick(e.dataTransfer.files[0]));
+
+// ------------------------------------------------------------------ main flow
+$("submit").addEventListener("click", async () => {
+  if (!file || busy) return;
+  setBusy(true); setError("");
   const form = new FormData(); form.append("file", file);
   try {
-    const res = await fetch("/api/predict", { method: "POST", body: form });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || res.statusText);
-    render(data);
+    setStatus('<span class="spinner"></span>Segmenting and classifying&hellip;');
+    const d = await api("/api/predict", { method: "POST", body: form });
+    const c = { id: d.case_id, label: $("label").value.trim() || file.name, file: URL.createObjectURL(file),
+                pred: d, report: d.report, xai: {}, summary: null, time: new Date() };
+    cases.unshift(c); current = c; view = "overlay";
+    renderAll(); renderHistory();
+    if (d.lesion_found) {
+      for (const m of ["lime", "shap"]) {
+        if ($(m === "lime" ? "useLime" : "useShap").checked) await runXai(c, m);
+      }
+    }
+    await writeSummary(c);
   } catch (e) {
-    $("error").textContent = "Could not analyse the image: " + e.message; show($("error"), true);
-  } finally { show($("status"), false); }
+    setError("Could not analyse the image: " + e.message);
+  } finally { setStatus(""); setBusy(false); }
+});
+
+async function runXai(c, method) {
+  const n = (INFO.explanations || {}).samples || "";
+  setStatus(`<span class="spinner"></span>Running ${method.toUpperCase()} (${n} masked copies of the image)&hellip;`);
+  try {
+    const r = await api(`/api/explain/${c.id}?method=${method}`, { method: "POST" });
+    c.xai[method] = r; c.report = r.report;
+    if (c === current) { view = method; renderAll(); }
+  } catch (e) { setError(`${method.toUpperCase()} failed: ${e.message}`); }
 }
 
-function render(d) {
-  images = { overlay: d.overlay, heatmap: d.heatmap };
-  setView("overlay");
-  const badge = $("badge");
-  badge.textContent = d.decision; badge.className = "badge " + d.level;
-  show($("probBlock"), d.lesion_found);
-  if (d.lesion_found) {
-    $("prob").textContent = pct(d.prob_malignant);
-    $("fill").style.width = pct(d.prob_malignant).replace(" ", "");
-    $("fill").style.background = d.level === "high" ? "var(--high)" : "var(--low)";
-    $("thr").style.left = pct(d.threshold).replace(" ", "");
-    $("thrLabel").textContent = "threshold " + pct(d.threshold);
+async function writeSummary(c) {
+  const llm = (INFO.llm || {}).enabled;
+  setStatus('<span class="spinner"></span>' + (llm ? "Writing the explanation with the language model&hellip;" : "Writing the explanation&hellip;"));
+  $("summary").innerHTML = '<p class="placeholder"><span class="spinner"></span>Writing the explanation&hellip;</p>';
+  show($("source"), false); $("summaryNote").textContent = "";
+  try {
+    c.summary = await api(`/api/summary/${c.id}`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language: $("language").value, audience: $("audience").value }) });
+  } catch (e) {
+    c.summary = { text: "", error: e.message };
   }
-  $("area").textContent = d.lesion_found ? d.lesion_area_pct + " % of the image" : "none found";
-  $("size").textContent = d.image_size[0] + " × " + d.image_size[1] + " px";
-  $("time").textContent = (d.elapsed_ms / 1000).toFixed(2) + " s";
-  const m = d.model || {};
-  $("models").textContent = `${(m.segmentation_models || []).length} segmentation + ${(m.classification_models || []).length} classification` + (m.tta ? " (with flip averaging)" : "");
-  show($("result"), true);
+  if (c === current) renderSummary();
 }
 
-const drop = $("drop");
-$("file").addEventListener("change", (e) => analyse(e.target.files[0]));
-["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => analyse(e.dataTransfer.files[0]));
+$("regen").addEventListener("click", async () => {
+  if (!current || busy) return;
+  setBusy(true); setError("");
+  try { await writeSummary(current); } finally { setStatus(""); setBusy(false); }
+});
+$("copy").addEventListener("click", () => {
+  if (current && current.summary && current.summary.text) navigator.clipboard.writeText(current.summary.text).catch(() => {});
+});
+$("print").addEventListener("click", () => window.print());
 
-fetch("/api/info").then(r => r.ok ? r.json() : Promise.reject(r)).then(info => {
+// ------------------------------------------------------------------ rendering
+function renderHistory() {
+  $("history").innerHTML = "";
+  if (cases.length < 2) return;
+  cases.forEach(c => {
+    const b = document.createElement("button");
+    b.textContent = c.label + " · " + (c.pred.level === "high" ? "suspicious" : c.pred.level === "low" ? "benign-looking" : "no lesion");
+    b.className = c === current ? "on" : "";
+    b.addEventListener("click", () => { if (busy) return; current = c; view = "overlay"; renderAll(); renderHistory(); renderSummary(); });
+    $("history").appendChild(b);
+  });
+}
+
+function renderAll() {
+  const c = current, d = c.pred, r = c.report, p = r.prediction;
+  show($("predPanel"), true); show($("viewPanel"), true); show($("xaiPanel"), d.lesion_found);
+  $("printHead").textContent = `${c.label} — analysed ${c.time.toLocaleString()}`;
+  const badge = $("badge"); badge.textContent = p.decision; badge.className = "badge " + p.level;
+  show($("scoreBlock"), p.lesion_found);
+  if (p.lesion_found) {
+    $("score").textContent = num(p.score_malignant);
+    $("fill").style.width = (100 * p.score_malignant).toFixed(1) + "%";
+    $("fill").style.background = p.level === "high" ? "var(--high)" : "var(--low)";
+    $("thr").style.left = (100 * p.threshold).toFixed(1) + "%";
+    $("thrLabel").textContent = "threshold " + num(p.threshold);
+  }
+  const L = r.lesion_measurements, S = r.segmentation;
+  $("sArea").textContent = L ? L.area_pct_of_image.toFixed(1) + " % of image" : "none outlined";
+  $("sVotes").textContent = p.models_above_threshold || "–";
+  $("sConf").textContent = S.mean_probability_inside_outline != null ? num(S.mean_probability_inside_outline) : "–";
+  $("sTime").textContent = ((d.elapsed_ms + (d.explain_ms || 0)) / 1000).toFixed(1) + " s";
+  const fl = r.flags || [];
+  $("flags").innerHTML = fl.map(f => `<li>${esc(f.text)}</li>`).join("");
+  show($("flagsBox"), fl.length > 0);
+  renderTabs(); renderXai();
+}
+
+const CAPTIONS = {
+  overlay: ["Lesion outlined by the segmentation models (filled) and its bounding box (yellow).", ""],
+  heatmap: ["Pixel-wise lesion probability from the segmentation models: bright = more likely lesion.", ""],
+  gradcam: ["Grad-CAM: where the classifier looked for its decision (red/yellow = strong, blue = weak). The white box is the region the classifier saw.", ""],
+  lime: ["LIME: each area's effect on the score, measured by blurring areas in many combinations.", "signed"],
+  shap: ["Kernel SHAP: each area's contribution to the score; contributions add up to the score difference between the full image and a fully blurred one.", "signed"],
+  original: ["Uploaded image.", ""],
+};
+function imageFor(name) {
+  const c = current;
+  return { overlay: c.pred.overlay, heatmap: c.pred.heatmap, gradcam: c.pred.gradcam,
+           lime: c.xai.lime && c.xai.lime.image, shap: c.xai.shap && c.xai.shap.image, original: c.file }[name];
+}
+function renderTabs() {
+  if (!imageFor(view)) view = "overlay";
+  document.querySelectorAll("#tabs button").forEach(b => {
+    const v = b.dataset.view;
+    b.disabled = !imageFor(v); b.classList.toggle("on", v === view);
+  });
+  $("view").src = imageFor(view);
+  $("caption").textContent = CAPTIONS[view][0];
+  $("legend").innerHTML = CAPTIONS[view][1] === "signed"
+    ? '<span><i class="sw" style="background:var(--pos)"></i>pushes towards suspicious</span><span><i class="sw" style="background:var(--neg)"></i>pushes towards benign-looking</span><span>white outline = lesion, grey box = analysed region</span>'
+    : "";
+}
+document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => { view = b.dataset.view; renderTabs(); }));
+
+function regionBars(byRegion, key) {
+  const names = { interior: "Inside the lesion", margin: "Lesion edge", surrounding: "Surrounding tissue" };
+  return '<div class="bars">' + Object.entries(byRegion).map(([k, v]) =>
+    `<div class="bar"><span>${names[k] || k}</span><span class="track"><i style="width:${(100 * v[key]).toFixed(0)}%"></i></span><em>${pct(v[key])}</em></div>`).join("") + "</div>";
+}
+function renderXai() {
+  const r = current.report, ex = r.explanations || {}, found = r.prediction.lesion_found;
+  const g = ex.gradcam;
+  $("xGradcam").innerHTML = `<h3>Grad-CAM attention <span class="chip">explains: ${esc(g ? g.explains : "–")}</span></h3>` + (g
+    ? `<p>Share of the classifier's attention in each part of the image (area share in brackets is what you would expect by chance).</p>` +
+      regionBars(g.evidence_by_region, "evidence") +
+      `<p>${Object.entries(g.evidence_by_region).map(([k, v]) => `${k}: ${pct(v.area)} of the area`).join(" · ")}</p>`
+    : "<p>Not available for this model or image.</p>");
+  ["lime", "shap"].forEach(m => {
+    const el = $(m === "lime" ? "xLime" : "xShap"), e = ex[m], title = m === "lime" ? "LIME" : "Kernel SHAP";
+    if (!e) {
+      el.innerHTML = `<h3>${title} <button data-run="${m}" ${busy || !found ? "disabled" : ""}>Run ${title}</button></h3>
+        <p>${m === "lime" ? "Fits a simple model to how the score changes when areas are blurred out." :
+          "Shapley-value contributions of each area; they add up to the total score change."} Takes longer on a CPU.</p>`;
+      return;
+    }
+    const d = e.deletion_check || {};
+    const quality = m === "lime" ? `fit quality R² = ${num(e.fit_r2)}` : `baseline score (all areas blurred) = ${num(e.score_all_regions_hidden)}`;
+    el.innerHTML = `<h3>${title} <span class="chip">${e.n_regions} areas · ${e.n_samples} samples · ${quality}</span></h3>
+      <table><tr><th>#</th><th>Area</th><th>Effect</th><th class="num">Size</th></tr>` +
+      (e.top_regions || []).map(t => `<tr><td>${t.rank}</td><td>${esc(t.location)}</td>
+        <td class="${t.effect > 0 ? "pos" : "neg"}">${t.effect > 0 ? "+" : ""}${num(t.effect, 3)} ${esc(t.direction)}</td>
+        <td class="num">${t.area_pct_of_region.toFixed(0)} %</td></tr>`).join("") + `</table>
+      <p>Deletion check: blurring the ${d.regions_hidden} most influential areas changed the score from
+        <b>${num(d.score_before)}</b> to <b>${num(d.score_after)}</b>.</p>`;
+  });
+  document.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", async () => {
+    if (busy) return;
+    const c = current; setBusy(true); setError("");
+    try { await runXai(c, b.dataset.run); } finally { setStatus(""); setBusy(false); }
+  }));
+  const L = r.lesion_measurements;
+  $("xLesion").innerHTML = !L ? "" : `<h3>Outline measurements <span class="chip">descriptive, not used by the AI</span></h3>
+    <table>
+      <tr><td>Depth-to-width ratio</td><td class="num">${num(L.depth_to_width)}</td><td>${L.depth_to_width > 1 ? "taller than wide" : "wider than tall"}</td></tr>
+      <tr><td>Circularity</td><td class="num">${num(L.circularity)}</td><td>1 = perfect circle</td></tr>
+      <tr><td>Solidity</td><td class="num">${num(L.solidity)}</td><td>1 = smooth convex border</td></tr>
+      <tr><td>Brightness vs surrounding</td><td class="num">${num(L.brightness_vs_surrounding)}</td><td>&lt; 1 = darker than surrounding tissue</td></tr>
+      <tr><td>Brightness behind the lesion</td><td class="num">${num(L.brightness_behind_vs_surrounding)}</td><td>&lt; 1 darker behind, &gt; 1 brighter behind</td></tr>
+      <tr><td>Position</td><td colspan="2">${esc(L.position.vertical)}, ${esc(L.position.horizontal)}</td></tr>
+    </table>`;
+}
+
+// minimal, safe Markdown (headings, bullets, numbered lists, bold, italics)
+function md(text) {
+  const out = []; let list = null;
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    let m;
+    if (!line) { close(); continue; }
+    if ((m = line.match(/^#{1,6}\s+(.*)$/))) { close(); out.push(`<h3>${inline(m[1])}</h3>`); continue; }
+    if ((m = line.match(/^[-*•]\s+(.*)$/))) { if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    if ((m = line.match(/^\d+[.)]\s+(.*)$/))) { if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    close(); out.push(`<p>${inline(line)}</p>`);
+  }
+  close();
+  return out.join("");
+}
+function renderSummary() {
+  const s = current && current.summary;
+  $("copy").disabled = $("print").disabled = !(s && s.text);
+  $("regen").disabled = busy || !current;
+  if (!s) { $("summary").innerHTML = '<p class="placeholder">No explanation yet.</p>'; show($("source"), false); $("summaryNote").textContent = ""; return; }
+  if (s.error) { $("summary").innerHTML = `<p class="error">Could not write the explanation: ${esc(s.error)}</p>`; show($("source"), false); return; }
+  $("summary").innerHTML = md(s.text);
+  $("source").textContent = s.source === "llm" ? `Written by ${s.model} from the analysis numbers` : "Built-in template (no language model)";
+  show($("source"), true);
+  $("summaryNote").textContent = s.note || "";
+}
+
+// ------------------------------------------------------------------ model information
+api("/api/info").then(info => {
+  INFO = info;
   if (info.disclaimer) $("disclaimer").textContent = info.disclaimer;
-  const rows = [];
-  const names = { "deploy/test": "held-out test set (BUSI + Breast-Lesions-USG + BUS-UCLM)",
+  $("pillModels").textContent = `${(info.segmentation_models || []).length} segmentation + ${(info.classification_models || []).length} classification`;
+  $("pillLlm").textContent = info.llm && info.llm.enabled ? info.llm.model : "template (no API key)";
+  const names = { "deploy/test": "Held-out test set (BUSI + Breast-Lesions-USG + BUS-UCLM)",
                   "A/test": "BUSI test set", "A/external": "BUS-BRA (other hospital, external)" };
+  const rows = [];
   for (const [k, v] of Object.entries(info.reference_metrics || {})) {
     const c = v.classification || {};
     if (c.auc == null) continue;
-    rows.push(`${names[k] || k}: AUC ${c.auc.toFixed(3)}, sensitivity ${pct(c.recall)}, specificity ${pct(c.specificity)} (n = ${c.n})`);
+    rows.push(`${esc(names[k] || k)}: AUC ${c.auc.toFixed(3)}, sensitivity ${pct(c.recall)}, specificity ${pct(c.specificity)} (n = ${c.n})`);
   }
-  $("perfText").innerHTML = rows.length ? rows.join("<br>") : "No reference metrics stored in the model bundle.";
-}).catch(() => { $("perfText").textContent = "Model not loaded: check the server log and /api/health."; });
+  $("perfText").innerHTML = rows.length ? rows.join("<br>") + "<br><span style='font-size:13px'>Sensitivity = share of cancers flagged; specificity = share of benign lesions not flagged. The threshold was chosen on validation data to flag about 90 % of cancers.</span>"
+                                        : "No reference metrics stored in the model bundle.";
+}).catch(() => {
+  $("pillModels").textContent = "not loaded"; $("pillLlm").textContent = "–";
+  $("perfText").textContent = "Model not loaded: check the server log and /api/health.";
+});
 </script>
 </body>
 </html>
