@@ -1,0 +1,7 @@
+# keep Unix line endings (the Dockerfile breaks with CRLF)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pt binary
+*.zip binary
+*.pdf binary
